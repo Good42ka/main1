@@ -1,50 +1,165 @@
--- Простой и быстрый скрипт
+-- Combined Script Functional from first script, Design from second (Kavo UI), with added features
+
+-- Load Kavo UI Library for design
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
 local Window = Library.CreateLib("Delta Menu", "Sentinel")
 
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
+
+-- Local Player
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
+local camera = workspace.CurrentCamera
 
--- Переменные
-local TriggerBotEnabled = false
+-- Variables from first script
+local SpinEnabled = false
+local SpinConnection = nil
+local ESPEnabled = false
+local SpinSpeed = 50
+local SpinDirection = 1
+local SpinIntensity = 1.0
+local ESPColor = Color3.fromRGB(255, 0, 0)
+local ESPTransparency = 0.3
+local BackgroundColor = Color3.fromRGB(30, 30, 35)
+local TextColor = Color3.fromRGB(255, 255, 255)
+local CommandPrefix = "-"
+
+-- Новые переменные с РАБОЧИМИ функциями
+local ThirdPersonEnabled = false
+local FirstPersonEnabled = false
 local AimAssistEnabled = false
+local HitboxesEnabled = false
 local NoclipEnabled = false
 local InfiniteJumpEnabled = false
+local TimeEnabled = false
 local NoclipConnection = nil
+local Configs = {}
+local CurrentConfig = "default"
 
--- Простой Trigger Bot
-local function triggerBot()
-    if not TriggerBotEnabled then return end
-    
-    local target = Mouse.Target
-    if target and target.Parent then
-        local humanoid = target.Parent:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            mouse1click()
-        end
+-- ESP Objects
+local ESPObjects = {}
+
+-- Создаем GUI для времени
+local TimeGui = Instance.new("ScreenGui")
+TimeGui.Name = "DeltaTimeGUI"
+TimeGui.Parent = CoreGui
+
+local TimeFrame = Instance.new("Frame")
+TimeFrame.Size = UDim2.new(0, 200, 0, 80)
+TimeFrame.Position = UDim2.new(0, 10, 0, 10)
+TimeFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+TimeFrame.BackgroundTransparency = 0.3
+TimeFrame.BorderSizePixel = 0
+TimeFrame.Parent = TimeGui
+
+local TimeCorner = Instance.new("UICorner")
+TimeCorner.CornerRadius = UDim.new(0, 8)
+TimeCorner.Parent = TimeFrame
+
+local TimeLabel = Instance.new("TextLabel")
+TimeLabel.Size = UDim2.new(1, 0, 0.4, 0)
+TimeLabel.Position = UDim2.new(0, 0, 0, 0)
+TimeLabel.BackgroundTransparency = 1
+TimeLabel.Text = "ВРЕМЯ"
+TimeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeLabel.TextSize = 16
+TimeLabel.Font = Enum.Font.GothamBold
+TimeLabel.Parent = TimeFrame
+
+local TimeValue = Instance.new("TextLabel")
+TimeValue.Size = UDim2.new(1, 0, 0.6, 0)
+TimeValue.Position = UDim2.new(0, 0, 0.4, 0)
+TimeValue.BackgroundTransparency = 1
+TimeValue.Text = "12:00:00"
+TimeValue.TextColor3 = Color3.fromRGB(0, 255, 0)
+TimeValue.TextSize = 20
+TimeValue.Font = Enum.Font.GothamBold
+TimeValue.Parent = TimeFrame
+
+TimeGui.Enabled = false
+
+-- Функция обновления времени
+local function updateTime()
+    while TimeEnabled do
+        local currentTime = os.date("%H:%M:%S")
+        TimeValue.Text = currentTime
+        wait(1)
     end
 end
 
--- Простой Aim Assist
-local function aimAssist()
-    if not AimAssistEnabled then return end
+-- Функция установки времени в игре
+local function setGameTime(hour)
+    Lighting.ClockTime = hour
+    notify("Time", "Время установлено на " .. hour .. ":00")
+end
+
+-- Функции из первого скрипта
+local function notify(title, message)
+    print("[Delta] " .. title .. ": " .. message)
+end
+
+local function startSpin()
+    if SpinConnection then
+        SpinConnection:Disconnect()
+    end
     
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-            if distance < 20 then
-                local targetPos = player.Character.HumanoidRootPart.Position
-                workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, targetPos)
-                break
+    SpinConnection = RunService.Heartbeat:Connect(function()
+        if SpinEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local root = LocalPlayer.Character.HumanoidRootPart
+            root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(SpinSpeed * SpinDirection * SpinIntensity), 0)
+        end
+    end)
+    
+    notify("Kritilka", "Spin started - Speed " .. SpinSpeed .. " Direction " .. SpinDirection)
+end
+
+local function stopSpin()
+    if SpinConnection then
+        SpinConnection:Disconnect()
+        SpinConnection = nil
+    end
+    notify("Kritilka", "Spin stopped")
+end
+
+local function toggleESP()
+    ESPEnabled = not ESPEnabled
+    if ESPEnabled then
+        notify("Visuals", "ESP enabled")
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "DeltaESP"
+                highlight.Parent = player.Character
+                highlight.Adornee = player.Character
+                highlight.FillColor = ESPColor
+                highlight.FillTransparency = ESPTransparency
+                highlight.OutlineColor = Color3.new(1, 1, 1)
+                highlight.OutlineTransparency = 0
+                ESPObjects[player] = highlight
             end
         end
+    else
+        notify("Visuals", "ESP disabled")
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                local highlight = player.Character:FindFirstChild("DeltaESP")
+                if highlight then
+                    highlight:Destroy()
+                end
+            end
+        end
+        ESPObjects = {}
     end
 end
 
--- No Clip
+-- РЕАЛЬНЫЙ No Clip
 local function toggleNoclip()
     NoclipEnabled = not NoclipEnabled
     if NoclipEnabled then
@@ -57,62 +172,192 @@ local function toggleNoclip()
                 end
             end
         end)
+        notify("Movement", "No Clip включен")
     else
         if NoclipConnection then
             NoclipConnection:Disconnect()
+            NoclipConnection = nil
+        end
+        notify("Movement", "No Clip выключен")
+    end
+end
+
+-- РЕАЛЬНЫЙ Infinite Jump
+local function toggleInfiniteJump()
+    InfiniteJumpEnabled = not InfiniteJumpEnabled
+    notify("Movement", "Infinite Jump " .. (InfiniteJumpEnabled and "включен" or "выключен"))
+end
+
+-- РЕАЛЬНЫЙ Aim Assist
+local function aimAssist()
+    if not AimAssistEnabled then return end
+    
+    local closestPlayer = nil
+    local closestDistance = math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local distance = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+            if distance < closestDistance and distance < 50 then
+                closestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    
+    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetPos = closestPlayer.Character.HumanoidRootPart.Position
+        camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
+    end
+end
+
+-- Hitboxes функция
+local function updateHitboxes()
+    if not HitboxesEnabled then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            for _, part in pairs(player.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    local box = part:FindFirstChild("DeltaHitbox") or Instance.new("BoxHandleAdornment")
+                    box.Name = "DeltaHitbox"
+                    box.Adornee = part
+                    box.AlwaysOnTop = true
+                    box.ZIndex = 10
+                    box.Size = part.Size
+                    box.Color3 = Color3.fromRGB(255, 0, 0)
+                    box.Transparency = 0.3
+                    box.Parent = part
+                end
+            end
         end
     end
 end
 
--- Infinite Jump
+-- Infinite Jump handler
 UserInputService.JumpRequest:Connect(function()
-    if InfiniteJumpEnabled and LocalPlayer.Character then
+    if InfiniteJumpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
         LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
 
--- Обработчик клавиш
-UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.R then
-        TriggerBotEnabled = not TriggerBotEnabled
-        print("Trigger Bot:", TriggerBotEnabled)
-    end
-    if input.KeyCode == Enum.KeyCode.Q then
-        AimAssistEnabled = not AimAssistEnabled
-        print("Aim Assist:", AimAssistEnabled)
-    end
-end)
-
--- Вкладки
+-- Tabs using Kavo UI
+local VisualsTab = Window:NewTab("Visuals")
+local KritilkaTab = Window:NewTab("Kritilka")
+local SettingsTab = Window:NewTab("Settings")
 local CombatTab = Window:NewTab("Combat")
 local MovementTab = Window:NewTab("Movement")
+local TimeTab = Window:NewTab("Time") -- Новая вкладка для времени
 
--- Combat
-local CombatSection = CombatTab:NewSection("Боевые функции")
-CombatSection:NewToggle("Trigger Bot", "Авто-стрельба по игрокам", function(state)
-    TriggerBotEnabled = state
+-- Time Section (НОВАЯ вкладка для времени)
+local TimeSection = TimeTab:NewSection("Настройки времени")
+TimeSection:NewToggle("Реальное время", "Показать реальное время", function(state)
+    TimeEnabled = state
+    TimeGui.Enabled = state
+    if state then
+        coroutine.wrap(updateTime)()
+        notify("Time", "Реальное время включено")
+    else
+        notify("Time", "Реальное время выключено")
+    end
 end)
 
-CombatSection:NewToggle("Aim Assist", "Авто-прицеливание", function(state)
+TimeSection:NewDropdown("Установить время игры", "Выберите время", {"12:00 (День)", "18:00 (Вечер)", "00:00 (Ночь)", "06:00 (Утро)"}, function(option)
+    if option == "12:00 (День)" then
+        setGameTime(12)
+    elseif option == "18:00 (Вечер)" then
+        setGameTime(18)
+    elseif option == "00:00 (Ночь)" then
+        setGameTime(0)
+    elseif option == "06:00 (Утро)" then
+        setGameTime(6)
+    end
+end)
+
+-- Combat Section
+local CombatSection = CombatTab:NewSection("Combat Features")
+CombatSection:NewToggle("Aim Assist", "Toggle Aim Assist", function(state)
     AimAssistEnabled = state
+    notify("Combat", "Aim Assist " .. (state and "enabled" or "disabled"))
 end)
 
-CombatSection:NewLabel("Клавиши: R - Trigger Bot, Q - Aim Assist")
+CombatSection:NewToggle("Hitboxes", "Toggle Hitboxes", function(state)
+    HitboxesEnabled = state
+    if not state then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                for _, part in pairs(player.Character:GetChildren()) do
+                    local box = part:FindFirstChild("DeltaHitbox")
+                    if box then
+                        box:Destroy()
+                    end
+                end
+            end
+        end
+    end
+    notify("Combat", "Hitboxes " .. (state and "enabled" or "disabled"))
+end)
 
--- Movement
-local MovementSection = MovementTab:NewSection("Передвижение")
-MovementSection:NewToggle("No Clip", "Сквозь стены", function(state)
+-- Movement Section
+local MovementSection = MovementTab:NewSection("Movement Features")
+MovementSection:NewToggle("No Clip", "Toggle No Clip", function(state)
     toggleNoclip()
 end)
 
-MovementSection:NewToggle("Infinite Jump", "Бесконечные прыжки", function(state)
-    InfiniteJumpEnabled = state
+MovementSection:NewToggle("Infinite Jump", "Toggle Infinite Jump", function(state)
+    toggleInfiniteJump()
 end)
 
--- Главный цикл
+-- Visuals Section
+local VisualsSection = VisualsTab:NewSection("ESP Settings")
+VisualsSection:NewToggle("ESP Toggle", "Toggle ESP ON/OFF", function(state)
+    toggleESP()
+end)
+
+VisualsSection:NewColorPicker("ESP Color", "Choose ESP Color", ESPColor, function(color)
+    ESPColor = color
+    if ESPEnabled then
+        toggleESP()
+        toggleESP()
+    end
+end)
+
+VisualsSection:NewSlider("ESP Transparency", "Set Transparency", 100, 0, function(value)
+    ESPTransparency = value / 100
+    if ESPEnabled then
+        toggleESP()
+        toggleESP()
+    end
+end)
+
+-- Kritilka Section
+local SpinSection = KritilkaTab:NewSection("Spin Settings")
+SpinSection:NewToggle("Spin Toggle", "Start/Stop Spin", function(state)
+    SpinEnabled = state
+    if SpinEnabled then
+        startSpin()
+    else
+        stopSpin()
+    end
+end)
+
+SpinSection:NewSlider("Spin Speed", "Set Speed", 100, 10, function(value)
+    SpinSpeed = value
+    if SpinEnabled then
+        stopSpin()
+        startSpin()
+    end
+end)
+
+-- Main loops
 RunService.Heartbeat:Connect(function()
-    triggerBot()
-    aimAssist()
+    if AimAssistEnabled then
+        aimAssist()
+    end
+    if HitboxesEnabled then
+        updateHitboxes()
+    end
 end)
 
-print("Delta Menu загружен!")
+-- Initialization
+notify("Delta", "Menu loaded successfully! Добавлено реальное время и настройки времени игры!")
