@@ -1,0 +1,511 @@
+-- Delta Menu 2.0 GOLD - Упрощенная версия с трассерами
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+
+-- Кастомная желтая тема
+local Theme = {
+    SchemeColor = Color3.fromRGB(255, 215, 0), -- Золотой
+    Background = Color3.fromRGB(40, 40, 40),
+    Header = Color3.fromRGB(35, 35, 35),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    ElementColor = Color3.fromRGB(50, 50, 50)
+}
+
+local Window = Library.CreateLib("DELTA 2.0 GOLD", Theme)
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
+
+-- Local Player
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local camera = workspace.CurrentCamera
+
+-- ПЕРЕМЕННЫЕ
+local SpinEnabled = false
+local SpinConnection = nil
+local ESPEnabled = false
+local SpinSpeed = 50
+local ESPColor = Color3.fromRGB(255, 215, 0)
+local ESPTransparency = 0.3
+local AimAssistEnabled = false
+local HitboxesEnabled = false
+local NoclipEnabled = false
+local InfiniteJumpEnabled = false
+local TimeEnabled = false
+local TracersEnabled = false
+local NoclipConnection = nil
+local ESPObjects = {}
+local TracerObjects = {}
+
+-- ПРЕМИУМ ПЕРЕМЕННЫЕ
+local AdvancedAntiAim = false
+local PerfectSilentAim = false
+local RageTrigger = false
+local AimPrediction = false
+local NoSpread = false
+local InstantReload = false
+local GhostMode = false
+local SmartZoomEnabled = false
+local ZoomLevel = 4
+
+-- ПРИВЯЗКА КЛАВИШ
+local Keybinds = {
+    ESP = Enum.KeyCode.F1,
+    AimAssist = Enum.KeyCode.F2,
+    Noclip = Enum.KeyCode.F3,
+    InfiniteJump = Enum.KeyCode.Space,
+    SmartZoom = Enum.KeyCode.Z,
+    Tracers = Enum.KeyCode.T
+}
+
+-- GUI для времени с ЖЕЛТЫМ цветом
+local TimeGui = Instance.new("ScreenGui")
+TimeGui.Name = "DeltaTimeGUI"
+TimeGui.Parent = CoreGui
+
+local TimeFrame = Instance.new("Frame")
+TimeFrame.Size = UDim2.new(0, 200, 0, 80)
+TimeFrame.Position = UDim2.new(0, 10, 0, 10)
+TimeFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+TimeFrame.BackgroundTransparency = 0.3
+TimeFrame.BorderSizePixel = 0
+TimeFrame.Parent = TimeGui
+
+local TimeCorner = Instance.new("UICorner")
+TimeCorner.CornerRadius = UDim.new(0, 8)
+TimeCorner.Parent = TimeFrame
+
+local TimeLabel = Instance.new("TextLabel")
+TimeLabel.Size = UDim2.new(1, 0, 0.4, 0)
+TimeLabel.Position = UDim2.new(0, 0, 0, 0)
+TimeLabel.BackgroundTransparency = 1
+TimeLabel.Text = "ВРЕМЯ"
+TimeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeLabel.TextSize = 16
+TimeLabel.Font = Enum.Font.GothamBold
+TimeLabel.Parent = TimeFrame
+
+local TimeValue = Instance.new("TextLabel")
+TimeValue.Size = UDim2.new(1, 0, 0.6, 0)
+TimeValue.Position = UDim2.new(0, 0, 0.4, 0)
+TimeValue.BackgroundTransparency = 1
+TimeValue.Text = "12:00:00"
+TimeValue.TextColor3 = Color3.fromRGB(255, 215, 0) -- ЖЕЛТЫЙ цвет
+TimeValue.TextSize = 20
+TimeValue.Font = Enum.Font.GothamBold
+TimeValue.Parent = TimeFrame
+
+TimeGui.Enabled = false
+
+-- ФУНКЦИИ
+local function updateTime()
+    while TimeEnabled do
+        local currentTime = os.date("%H:%M:%S")
+        TimeValue.Text = currentTime
+        wait(1)
+    end
+end
+
+local function setGameTime(hour)
+    Lighting.ClockTime = hour
+    notify("Time", "Время установлено на " .. hour .. ":00")
+end
+
+local function notify(title, message)
+    print("[DELTA 2.0 GOLD] " .. title .. ": " .. message)
+end
+
+-- РАБОЧИЙ ESP
+local function toggleESP()
+    ESPEnabled = not ESPEnabled
+    if ESPEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "DeltaESP"
+                highlight.FillColor = ESPColor
+                highlight.OutlineColor = Color3.new(1, 1, 1)
+                highlight.FillTransparency = ESPTransparency
+                highlight.OutlineTransparency = 0
+                highlight.Parent = player.Character
+                highlight.Adornee = player.Character
+                ESPObjects[player] = highlight
+            end
+        end
+        notify("Visuals", "ESP ВКЛЮЧЕН")
+    else
+        for player, highlight in pairs(ESPObjects) do
+            if highlight then
+                highlight:Destroy()
+            end
+        end
+        ESPObjects = {}
+        notify("Visuals", "ESP ВЫКЛЮЧЕН")
+    end
+end
+
+-- РАБОЧИЙ TRACERS (линии к игрокам)
+local function toggleTracers()
+    TracersEnabled = not TracersEnabled
+    if TracersEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local tracer = Instance.new("Frame")
+                    tracer.Name = "DeltaTracer"
+                    tracer.BackgroundColor3 = ESPColor
+                    tracer.BorderSizePixel = 0
+                    tracer.Size = UDim2.new(0, 2, 0, 100)
+                    tracer.AnchorPoint = Vector2.new(0.5, 1)
+                    tracer.Position = UDim2.new(0.5, 0, 1, 0)
+                    tracer.Parent = TimeGui
+                    
+                    TracerObjects[player] = tracer
+                    
+                    -- Обновление позиции трассера
+                    local connection
+                    connection = RunService.Heartbeat:Connect(function()
+                        if not TracersEnabled or not player.Character or not root then
+                            connection:Disconnect()
+                            return
+                        end
+                        
+                        local screenPoint, onScreen = camera:WorldToViewportPoint(root.Position)
+                        if onScreen then
+                            tracer.Visible = true
+                            tracer.Position = UDim2.new(0, screenPoint.X, 0, screenPoint.Y)
+                            tracer.Rotation = math.atan2(screenPoint.Y - camera.ViewportSize.Y/2, screenPoint.X - camera.ViewportSize.X/2) * (180/math.pi) + 90
+                        else
+                            tracer.Visible = false
+                        end
+                    end)
+                end
+            end
+        end
+        notify("Visuals", "Трассеры ВКЛЮЧЕНЫ")
+    else
+        for player, tracer in pairs(TracerObjects) do
+            if tracer then
+                tracer:Destroy()
+            end
+        end
+        TracerObjects = {}
+        notify("Visuals", "Трассеры ВЫКЛЮЧЕНЫ")
+    end
+end
+
+-- РАБОЧИЙ NoClip
+local function toggleNoclip()
+    NoclipEnabled = not NoclipEnabled
+    if NoclipEnabled then
+        NoclipConnection = RunService.Stepped:Connect(function()
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+        notify("Movement", "NoClip ВКЛЮЧЕН")
+    else
+        if NoclipConnection then
+            NoclipConnection:Disconnect()
+            NoclipConnection = nil
+        end
+        notify("Movement", "NoClip ВЫКЛЮЧЕН")
+    end
+end
+
+-- РАБОЧИЙ Infinite Jump
+local function toggleInfiniteJump()
+    InfiniteJumpEnabled = not InfiniteJumpEnabled
+    notify("Movement", "Infinite Jump: " .. (InfiniteJumpEnabled and "ON" or "OFF"))
+end
+
+-- РАБОЧИЙ Aim Assist
+local function aimAssist()
+    if not AimAssistEnabled or not LocalPlayer.Character then return end
+    
+    local closestPlayer = nil
+    local closestDistance = 50
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if humanoid and humanoid.Health > 0 and root then
+                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - root.Position).Magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    
+    if closestPlayer then
+        local target = closestPlayer.Character.HumanoidRootPart
+        camera.CFrame = CFrame.lookAt(camera.CFrame.Position, target.Position)
+    end
+end
+
+-- РАБОЧИЙ Hitboxes
+local function updateHitboxes()
+    if not HitboxesEnabled then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            for _, part in pairs(player.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    local box = part:FindFirstChild("DeltaHitbox")
+                    if not box then
+                        box = Instance.new("BoxHandleAdornment")
+                        box.Name = "DeltaHitbox"
+                        box.Adornee = part
+                        box.AlwaysOnTop = true
+                        box.ZIndex = 10
+                        box.Size = part.Size
+                        box.Color3 = Color3.fromRGB(255, 0, 0)
+                        box.Transparency = 0.3
+                        box.Parent = part
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- РАБОЧИЙ Spin
+local function startSpin()
+    if SpinConnection then SpinConnection:Disconnect() end
+    
+    SpinConnection = RunService.Heartbeat:Connect(function()
+        if SpinEnabled and LocalPlayer.Character then
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(SpinSpeed), 0)
+            end
+        end
+    end)
+end
+
+local function stopSpin()
+    if SpinConnection then
+        SpinConnection:Disconnect()
+        SpinConnection = nil
+    end
+end
+
+-- РАБОЧИЕ ПРЕМИУМ ФУНКЦИИ
+local function enableAdvancedAntiAim()
+    AdvancedAntiAim = true
+    RunService.Heartbeat:Connect(function()
+        if AdvancedAntiAim and LocalPlayer.Character then
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(math.random(-10, 10)), 0)
+            end
+        end
+    end)
+end
+
+local function toggleSmartZoom()
+    SmartZoomEnabled = not SmartZoomEnabled
+    if SmartZoomEnabled then
+        camera.FieldOfView = 70 / ZoomLevel
+    else
+        camera.FieldOfView = 70
+    end
+end
+
+-- СИСТЕМА ПРИВЯЗКИ КЛАВИШ
+local function setKeybind(functionName, key)
+    Keybinds[functionName] = key
+    notify("Keybinds", "Клавиша для " .. functionName .. " установлена: " .. key.Name)
+end
+
+-- ОБРАБОТЧИКИ КЛАВИШ
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        -- Infinite Jump
+        if input.KeyCode == Keybinds.InfiniteJump and InfiniteJumpEnabled then
+            LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+        end
+        
+        -- ESP
+        if input.KeyCode == Keybinds.ESP then
+            toggleESP()
+        end
+        
+        -- Noclip
+        if input.KeyCode == Keybinds.Noclip then
+            toggleNoclip()
+        end
+        
+        -- Smart Zoom
+        if input.KeyCode == Keybinds.SmartZoom then
+            toggleSmartZoom()
+        end
+        
+        -- Tracers
+        if input.KeyCode == Keybinds.Tracers then
+            toggleTracers()
+        end
+    end
+end)
+
+-- ИНТЕРФЕЙС
+local MainTab = Window:NewTab("ГЛАВНАЯ")
+local PremiumTab = Window:NewTab("ПРЕМИУМ")
+local VisualsTab = Window:NewTab("ВИЗУАЛЫ")
+local CombatTab = Window:NewTab("БОЙ")
+local MovementTab = Window:NewTab("ДВИЖЕНИЕ")
+local TimeTab = Window:NewTab("ВРЕМЯ")
+local KritilkaTab = Window:NewTab("КРИТИЛКА")
+local KeybindsTab = Window:NewTab("КЛАВИШИ")
+local HelpTab = Window:NewTab("ПОМОЩЬ")
+
+-- ГЛАВНАЯ ВКЛАДКА
+local WelcomeSection = MainTab:NewSection("DELTA 2.0 GOLD")
+WelcomeSection:NewLabel("Версия 2.0 - Gold Edition")
+WelcomeSection:NewLabel("Футуристичный чит-меню")
+
+-- ВИЗУАЛЫ
+local VisualsSection = VisualsTab:NewSection("НАСТРОЙКИ ВИЗУАЛОВ")
+VisualsSection:NewToggle("ESP", "Включить подсветку игроков", function(state)
+    toggleESP()
+end)
+
+VisualsSection:NewToggle("Трассеры", "Линии к игрокам", function(state)
+    toggleTracers()
+end)
+
+VisualsSection:NewColorPicker("Цвет ESP", "Выберите цвет", ESPColor, function(color)
+    ESPColor = color
+end)
+
+VisualsSection:NewSlider("Прозрачность", "Прозрачность ESP", 100, 0, function(value)
+    ESPTransparency = value / 100
+end)
+
+-- БОЙ
+local CombatSection = CombatTab:NewSection("БОЕВЫЕ ФУНКЦИИ")
+CombatSection:NewToggle("Aim Assist", "Помощь в прицеливании", function(state)
+    AimAssistEnabled = state
+end)
+
+CombatSection:NewToggle("Hitboxes", "Показать хитбоксы", function(state)
+    HitboxesEnabled = state
+end)
+
+-- ДВИЖЕНИЕ
+local MovementSection = MovementTab:NewSection("ФУНКЦИИ ДВИЖЕНИЯ")
+MovementSection:NewToggle("NoClip", "Режим сквозь стены", function(state)
+    toggleNoclip()
+end)
+
+MovementSection:NewToggle("Infinite Jump", "Бесконечные прыжки", function(state)
+    toggleInfiniteJump()
+end)
+
+-- ВРЕМЯ
+local TimeSection = TimeTab:NewSection("НАСТРОЙКИ ВРЕМЕНИ")
+TimeSection:NewToggle("Реальное время", "Показать реальное время", function(state)
+    TimeEnabled = state
+    TimeGui.Enabled = state
+    if state then
+        coroutine.wrap(updateTime)()
+    end
+end)
+
+TimeSection:NewDropdown("Игровое время", "Установить время в игре", {"12:00 (День)", "18:00 (Вечер)", "00:00 (Ночь)", "06:00 (Утро)"}, function(option)
+    local times = {["12:00 (День)"] = 12, ["18:00 (Вечер)"] = 18, ["00:00 (Ночь)"] = 0, ["06:00 (Утро)"] = 6}
+    setGameTime(times[option])
+end)
+
+-- КРИТИЛКА
+local SpinSection = KritilkaTab:NewSection("НАСТРОЙКИ ВРАЩЕНИЯ")
+SpinSection:NewToggle("Spin", "Вращение персонажа", function(state)
+    SpinEnabled = state
+    if state then
+        startSpin()
+    else
+        stopSpin()
+    end
+end)
+
+SpinSection:NewSlider("Скорость", "Скорость вращения", 100, 1, function(value)
+    SpinSpeed = value
+end)
+
+-- ПРЕМИУМ
+local PremiumSection = PremiumTab:NewSection("ПРЕМИУМ ФУНКЦИИ")
+PremiumSection:NewToggle("Advanced Anti-Aim", "Защита от попаданий", function(state)
+    if state then
+        enableAdvancedAntiAim()
+    else
+        AdvancedAntiAim = false
+    end
+end)
+
+PremiumSection:NewToggle("Smart Zoom", "Умный зум 4x/8x/16x", function(state)
+    toggleSmartZoom()
+end)
+
+PremiumSection:NewDropdown("Уровень зума", "Выберите увеличение", {"4x", "8x", "16x"}, function(option)
+    ZoomLevel = tonumber(string.sub(option, 1, -2))
+    if SmartZoomEnabled then
+        camera.FieldOfView = 70 / ZoomLevel
+    end
+end)
+
+-- КЛАВИШИ
+local KeybindsSection = KeybindsTab:NewSection("ПРИВЯЗКА КЛАВИШ")
+KeybindsSection:NewKeybind("ESP", "Клавиша для ESP", Keybinds.ESP, function(key)
+    setKeybind("ESP", key)
+end)
+
+KeybindsSection:NewKeybind("Трассеры", "Клавиша для трассеров", Keybinds.Tracers, function(key)
+    setKeybind("Tracers", key)
+end)
+
+KeybindsSection:NewKeybind("NoClip", "Клавиша для NoClip", Keybinds.Noclip, function(key)
+    setKeybind("Noclip", key)
+end)
+
+KeybindsSection:NewKeybind("Smart Zoom", "Клавиша для зума", Keybinds.SmartZoom, function(key)
+    setKeybind("SmartZoom", key)
+end)
+
+-- ПОМОЩЬ
+local HelpSection = HelpTab:NewSection("ОБЪЯСНЕНИЕ ФУНКЦИЙ")
+HelpSection:NewLabel("ESP - подсветка игроков через стены")
+HelpSection:NewLabel("Трассеры - линии от центра к игрокам")
+HelpSection:NewLabel("Aim Assist - помощь в прицеливании")
+HelpSection:NewLabel("NoClip - хождение через стены")
+HelpSection:NewLabel("Infinite Jump - бесконечные прыжки")
+HelpSection:NewLabel("Hitboxes - отображение хитбоксов")
+HelpSection:NewLabel("Spin - вращение персонажа")
+HelpSection:NewLabel("Smart Zoom - умное приближение")
+HelpSection:NewLabel("Anti-Aim - защита от попаданий")
+
+-- ОСНОВНЫЕ ЦИКЛЫ
+RunService.Heartbeat:Connect(function()
+    if AimAssistEnabled then
+        aimAssist()
+    end
+    if HitboxesEnabled then
+        updateHitboxes()
+    end
+end)
+
+-- ИНИЦИАЛИЗАЦИЯ
+notify("SYSTEM", "DELTA 2.0 GOLD ЗАГРУЖЕН!")
+notify("VISUALS", "Трассеры добавлены в меню")
+notify("KEYBINDS", "Система привязки клавиш активирована")
